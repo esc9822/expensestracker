@@ -43,6 +43,42 @@ def init_db():
         )
     ''')
     
+    # Migrate existing tables - add user_id column if it doesn't exist
+    try:
+        # Check if user_id column exists in expenses table
+        cursor.execute("PRAGMA table_info(expenses)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'user_id' not in columns:
+            cursor.execute("ALTER TABLE expenses ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'")
+            conn.commit()
+            print("✓ Added user_id column to expenses table")
+    except Exception as e:
+        print(f"Migration warning (expenses): {e}")
+    
+    try:
+        # Check if user_id column exists in budget table
+        cursor.execute("PRAGMA table_info(budget)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'user_id' not in columns:
+            # For budget table, we need to recreate it due to UNIQUE constraint change
+            cursor.execute("ALTER TABLE budget RENAME TO budget_old")
+            cursor.execute('''
+                CREATE TABLE budget (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    month TEXT NOT NULL,
+                    amount REAL NOT NULL,
+                    user_id TEXT NOT NULL DEFAULT 'default',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(month, user_id)
+                )
+            ''')
+            cursor.execute("INSERT INTO budget (id, month, amount, user_id, created_at) SELECT id, month, amount, 'default', created_at FROM budget_old")
+            cursor.execute("DROP TABLE budget_old")
+            conn.commit()
+            print("✓ Migrated budget table with user_id column")
+    except Exception as e:
+        print(f"Migration warning (budget): {e}")
+    
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
