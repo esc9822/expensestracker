@@ -12,6 +12,7 @@ import database as db
 from functools import wraps
 import config
 import os
+import uuid
 
 app = Flask(__name__)
 # Use environment variable for production, fallback for development
@@ -19,6 +20,13 @@ app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 db.init_db()
 success, message = config.fetch_live_rates()
+
+def get_user_id():
+    """Get or create a unique user_id for this browser/device"""
+    if 'browser_id' not in session:
+        # Generate a unique ID for this browser/device
+        session['browser_id'] = str(uuid.uuid4())
+    return session['browser_id']
 
 def login_required(f):
     @wraps(f)
@@ -103,7 +111,8 @@ def home():
         country_info = config.get_country_info(current_country)
         amount_in_base = config.convert_to_base(amount, country_info['currency'])
         
-        db.add_expense(date, name, amount_in_base, category, due_date)
+        user_id = get_user_id()
+        db.add_expense(date, name, amount_in_base, category, due_date, user_id)
         return redirect("/")
 
     # Get pagination parameters
@@ -111,7 +120,8 @@ def home():
     search = request.args.get('search', '', type=str)
     category_filter = request.args.get('category', '', type=str)
     
-    expenses, total = db.get_all_expenses(page=page, search=search, category=category_filter)
+    user_id = get_user_id()
+    expenses, total = db.get_all_expenses(page=page, search=search, category=category_filter, user_id=user_id)
     
     # Get current country and currency info
     current_country = get_current_country()
@@ -136,7 +146,7 @@ def home():
     total_pages = (total + per_page - 1) // per_page
     
     # Get budget status and convert
-    budget_status = db.get_budget_status()
+    budget_status = db.get_budget_status(user_id=user_id)
     if budget_status:
         budget_status['budget'] = config.convert_from_base(budget_status['budget'], country_info['currency'])
         budget_status['spent'] = config.convert_from_base(budget_status['spent'], country_info['currency'])
@@ -169,14 +179,16 @@ def home():
 @login_required
 @admin_required
 def delete(index):
-    db.delete_expense(index)
+    user_id = get_user_id()
+    db.delete_expense(index, user_id)
     return redirect("/")
 
 @app.route("/delete_all_expenses")
 @login_required
 @admin_required
 def delete_all_expenses():
-    db.delete_all_expenses()
+    user_id = get_user_id()
+    db.delete_all_expenses(user_id)
     flash('All expenses deleted successfully!')
     return redirect("/")
 
@@ -195,14 +207,16 @@ def set_budget():
     country_info = config.get_country_info(current_country)
     amount_in_base = config.convert_to_base(amount, country_info['currency'])
     
-    db.set_budget(amount_in_base, month)
+    user_id = get_user_id()
+    db.set_budget(amount_in_base, month, user_id)
     return redirect("/")
 
 @app.route("/clear_budget")
 @login_required
 @admin_required
 def clear_budget():
-    db.clear_budget()
+    user_id = get_user_id()
+    db.clear_budget(user_id=user_id)
     flash('Budget cleared successfully!')
     return redirect("/")
 
@@ -221,10 +235,11 @@ def edit(index):
         country_info = config.get_country_info(current_country)
         amount_in_base = config.convert_to_base(amount, country_info['currency'])
         
-        db.update_expense(index, date, name, amount_in_base, category, due_date)
+        user_id = get_user_id()
+        db.update_expense(index, date, name, amount_in_base, category, due_date, user_id)
         return redirect("/")
 
-    expense = db.get_expense_by_id(index)
+    expense = db.get_expense_by_id(index, get_user_id())
     if expense:
         current_country = get_current_country()
         country_info = config.get_country_info(current_country)
@@ -247,8 +262,9 @@ def edit(index):
 @app.route("/report")
 @login_required
 def report():
-    data = db.get_report_data()
-    budget_status = db.get_budget_status()
+    user_id = get_user_id()
+    data = db.get_report_data(user_id)
+    budget_status = db.get_budget_status(user_id=user_id)
     
     current_country = get_current_country()
     country_info = config.get_country_info(current_country)
@@ -301,12 +317,13 @@ def download_csv():
     import io
     from io import StringIO
     
-    data = db.get_report_data()
+    user_id = get_user_id()
+    data = db.get_report_data(user_id)
     expenses = data['all_expenses']
     total = data['total']
     category_totals = data['category_totals']
     monthly_totals = data['monthly_totals']
-    budget_status = db.get_budget_status()
+    budget_status = db.get_budget_status(user_id=user_id)
     
     current_country = get_current_country()
     country_info = config.get_country_info(current_country)
@@ -407,7 +424,8 @@ def download_pdf():
         conversion_rate = config.CONVERSION_RATES.get(currency, 1.0)
         
         # Get report data
-        report_data = db.get_report_data()
+        user_id = get_user_id()
+        report_data = db.get_report_data(user_id)
         
         # Convert amounts for current currency
         total = report_data['total'] * conversion_rate
@@ -432,7 +450,7 @@ def download_pdf():
             })
         
         # Get budget status
-        budget_status = db.get_budget_status(config.DEFAULT_CURRENCY)
+        budget_status = db.get_budget_status(user_id=user_id)
         if budget_status and currency != config.DEFAULT_CURRENCY:
             budget_status['budget'] *= conversion_rate
             budget_status['spent'] *= conversion_rate
