@@ -1,0 +1,97 @@
+<!-- Dark Mode Styles - Include in <style> section -->
+<style>
+:root {
+    --bg-color: #f8f9fa;
+    --card-bg: #ffffff;
+    --text-color: #212529;
+    --border-color: #dee2e6;
+}
+
+[data-theme="dark"] {
+    --bg-color: #1a1a2e;
+    --card-bg: #16213e;
+    --text-color: #eaeaea;
+    --border-color: #0f3460;
+}
+
+body {
+    background: var(--bg-color);
+    color: var(--text-color);
+    transition: background 0.3s, color 0.3s;
+}
+
+.card {
+    background: var(--card-bg);
+    color: var(--text-color);
+}
+
+.table-modern {
+    background: var(--card-bg);
+}
+
+[data-theme="dark"] .table {
+    color: var(--text-color);
+}
+
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .input-group-text {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .progress {
+    background: #0f3460;
+}
+
+.dark-mode-toggle {
+    position: relative;
+    width: 60px;
+    height: 30px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.dark-mode-toggle::before {
+    content: '';
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: white;
+    top: 2px;
+    left: 2px;
+    transition: all 0.3s;
+}
+
+[data-theme="dark"] .dark-mode-toggle::before {
+    left: 32px;
+    background: #ffd700;
+}
+</style>
+
+<!-- Dark Mode Toggle Button - Include in navbar -->
+<div class="dark-mode-toggle me-3" id="darkModeToggle" title="Toggle Dark Mode"></div>
+
+<!-- Dark Mode JavaScript - Include before </body> -->
+<script>
+const darkModeToggle = document.getElementById('darkModeToggle');
+const htmlElement = document.documentElement;
+const currentTheme = localStorage.getItem('theme') || 'light';
+htmlElement.setAttribute('data-theme', currentTheme);
+
+darkModeToggle.addEventListener('click', () => {
+    const theme = htmlElement.getAttribute('data-theme');
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    htmlElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+});
+</script>
