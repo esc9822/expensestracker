@@ -8,7 +8,7 @@ A modern expense tracking web application with multi-currency support, budget tr
 
 ## 🌐 Live Demo
 
-**Try it now:** [[[https://expense-tracker-yourname.onrender.com](https://expense-tracker-yourname.onrender.com)](https://expensestracker-esc.onrender.com/)](https://expensestracker-esc.onrender.com/)
+**Try it now:**https://expensestracker-esc.onrender.com/
 
 > **Note:** Free tier may take 30-60 seconds to wake up on first visit
 
@@ -180,5 +180,6 @@ Developed by **ESC**
 ---
 
 ⭐ If you find this useful, please star the repository!
+
 
 
