@@ -27,6 +27,7 @@ def init_db():
             amount REAL NOT NULL,
             category TEXT NOT NULL,
             due_date TEXT,
+            user_id TEXT NOT NULL DEFAULT 'default',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -34,9 +35,11 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS budget (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            month TEXT NOT NULL UNIQUE,
+            month TEXT NOT NULL,
             amount REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            user_id TEXT NOT NULL DEFAULT 'default',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(month, user_id)
         )
     ''')
     
@@ -110,15 +113,15 @@ def migrate_from_csv():
     finally:
         conn.close()
 
-def get_all_expenses(page=1, per_page=50, search='', category=''):
+def get_all_expenses(page=1, per_page=50, search='', category='', user_id='default'):
     """Get expenses with pagination and filtering"""
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
     # Build query
-    query = 'SELECT id, date, name, amount, category, due_date FROM expenses WHERE 1=1'
-    params = []
+    query = 'SELECT id, date, name, amount, category, due_date FROM expenses WHERE user_id = ?'
+    params = [user_id]
     
     if search:
         query += ' AND (name LIKE ? OR category LIKE ?)'
@@ -144,20 +147,20 @@ def get_all_expenses(page=1, per_page=50, search='', category=''):
     
     return expenses, total
 
-def add_expense(date, name, amount, category, due_date=''):
+def add_expense(date, name, amount, category, due_date='', user_id='default'):
     """Add new expense"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     
     cursor.execute('''
-        INSERT INTO expenses (date, name, amount, category, due_date)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (date, name, amount, category, due_date))
+        INSERT INTO expenses (date, name, amount, category, due_date, user_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (date, name, amount, category, due_date, user_id))
     
     conn.commit()
     conn.close()
 
-def update_expense(expense_id, date, name, amount, category, due_date=''):
+def update_expense(expense_id, date, name, amount, category, due_date='', user_id='default'):
     """Update existing expense"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -165,66 +168,67 @@ def update_expense(expense_id, date, name, amount, category, due_date=''):
     cursor.execute('''
         UPDATE expenses 
         SET date=?, name=?, amount=?, category=?, due_date=?
-        WHERE id=?
-    ''', (date, name, amount, category, due_date, expense_id))
+        WHERE id=? AND user_id=?
+    ''', (date, name, amount, category, due_date, expense_id, user_id))
     
     conn.commit()
     conn.close()
 
-def delete_expense(expense_id):
+def delete_expense(expense_id, user_id='default'):
     """Delete expense"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     
-    cursor.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
+    cursor.execute('DELETE FROM expenses WHERE id=? AND user_id=?', (expense_id, user_id))
     
     conn.commit()
     conn.close()
-def delete_all_expenses():
-    """Delete all expenses from database"""
+def delete_all_expenses(user_id='default'):
+    """Delete all expenses from database for specific user"""
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     
-    cursor.execute('DELETE FROM expenses')
+    cursor.execute('DELETE FROM expenses WHERE user_id=?', (user_id,))
     
     conn.commit()
     conn.close()
-def get_expense_by_id(expense_id):
+def get_expense_by_id(expense_id, user_id='default'):
     """Get single expense by ID"""
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
-    cursor.execute('SELECT id, date, name, amount, category, due_date FROM expenses WHERE id=?', (expense_id,))
+    cursor.execute('SELECT id, date, name, amount, category, due_date FROM expenses WHERE id=? AND user_id=?', (expense_id, user_id))
     expense = cursor.fetchone()
     
     conn.close()
     return expense
 
-def get_report_data():
+def get_report_data(user_id='default'):
     """Get aggregated data for reports"""
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
     # Total
-    cursor.execute('SELECT SUM(amount) FROM expenses')
+    cursor.execute('SELECT SUM(amount) FROM expenses WHERE user_id=?', (user_id,))
     total = cursor.fetchone()[0] or 0
     
     # Category totals
-    cursor.execute('SELECT category, SUM(amount) FROM expenses GROUP BY category')
+    cursor.execute('SELECT category, SUM(amount) FROM expenses WHERE user_id=? GROUP BY category', (user_id,))
     category_totals = dict(cursor.fetchall())
     
     # Monthly totals
     cursor.execute('''
         SELECT substr(date, 1, 7) as month, SUM(amount) 
         FROM expenses 
+        WHERE user_id=?
         GROUP BY month
-    ''')
+    ''', (user_id,))
     monthly_totals = dict(cursor.fetchall())
     
     # All expenses for export
-    cursor.execute('SELECT date, name, amount, category, due_date FROM expenses ORDER BY date DESC')
+    cursor.execute('SELECT date, name, amount, category, due_date FROM expenses WHERE user_id=? ORDER BY date DESC', (user_id,))
     all_expenses = cursor.fetchall()
     
     conn.close()
@@ -236,7 +240,7 @@ def get_report_data():
         'all_expenses': all_expenses
     }
 
-def get_budget(month=None):
+def get_budget(month=None, user_id='default'):
     """Get budget for specific month (default: current month)"""
     if not month:
         month = datetime.now().strftime('%Y-%m')
@@ -244,13 +248,13 @@ def get_budget(month=None):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     
-    cursor.execute('SELECT amount FROM budget WHERE month = ?', (month,))
+    cursor.execute('SELECT amount FROM budget WHERE month = ? AND user_id = ?', (month, user_id))
     result = cursor.fetchone()
     
     conn.close()
     return result[0] if result else 0
 
-def set_budget(amount, month=None):
+def set_budget(amount, month=None, user_id='default'):
     """Set or update budget for specific month"""
     if not month:
         month = datetime.now().strftime('%Y-%m')
@@ -259,15 +263,15 @@ def set_budget(amount, month=None):
     cursor = conn.cursor()
     
     cursor.execute('''
-        INSERT INTO budget (month, amount) 
-        VALUES (?, ?)
-        ON CONFLICT(month) DO UPDATE SET amount = ?
-    ''', (month, amount, amount))
+        INSERT INTO budget (month, amount, user_id) 
+        VALUES (?, ?, ?)
+        ON CONFLICT(month, user_id) DO UPDATE SET amount = ?
+    ''', (month, amount, user_id, amount))
     
     conn.commit()
     conn.close()
 
-def clear_budget(month=None):
+def clear_budget(month=None, user_id='default'):
     """Clear/delete budget for specific month"""
     if not month:
         month = datetime.now().strftime('%Y-%m')
@@ -275,17 +279,17 @@ def clear_budget(month=None):
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
     
-    cursor.execute('DELETE FROM budget WHERE month = ?', (month,))
+    cursor.execute('DELETE FROM budget WHERE month = ? AND user_id = ?', (month, user_id))
     
     conn.commit()
     conn.close()
 
-def get_budget_status(month=None):
+def get_budget_status(month=None, user_id='default'):
     """Get budget status with spent and remaining amounts"""
     if not month:
         month = datetime.now().strftime('%Y-%m')
     
-    budget = get_budget(month)
+    budget = get_budget(month, user_id)
     
     conn = sqlite3.connect(DATABASE)
     cursor = conn.cursor()
@@ -293,8 +297,8 @@ def get_budget_status(month=None):
     # Get total spent for the month
     cursor.execute('''
         SELECT SUM(amount) FROM expenses 
-        WHERE substr(date, 1, 7) = ?
-    ''', (month,))
+        WHERE substr(date, 1, 7) = ? AND user_id = ?
+    ''', (month, user_id))
     
     spent = cursor.fetchone()[0] or 0
     conn.close()
